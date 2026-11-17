@@ -234,6 +234,19 @@
   @media (max-width: 560px) { .checks { grid-template-columns: 1fr; } }
   .checks label { display: flex; align-items: center; gap: 10px; font-weight: 400; font-size: .98rem; cursor: pointer; }
   .checks input { width: 20px; height: 20px; min-height: 0; accent-color: var(--red); margin: 0; }
+  /* Multi-vehicle. Vehicle 1 is plain markup so the form still works with no JS;
+     extra vehicles are cloned from it and carry their own service checkboxes,
+     because two cars rarely want the same work. */
+  .veh { display: grid; gap: 16px; }
+  #veh-extra { display: grid; gap: 16px; }
+  #veh-extra .veh { border-top: 1px dashed #35353b; padding-top: 16px; }
+  .veh-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .veh-label { font-size: .85rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--chrome); }
+  .veh-remove { background: none; border: 0; color: var(--muted); font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 4px; min-height: 0; }
+  .veh-remove:hover { color: var(--red); }
+  .add-veh { justify-self: start; background: none; border: 1px dashed #3d3d44; color: var(--chrome); font: inherit; font-size: .92rem; font-weight: 600; letter-spacing: .03em; padding: 11px 16px; border-radius: 6px; cursor: pointer; min-height: 46px; }
+  .add-veh:hover { border-color: var(--red); color: #fff; }
+  [hidden] { display: none !important; }
   .gotcha { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
   .form-note { margin: 0; font-size: .88rem; line-height: 1.5; color: var(--chrome); background: rgba(227,18,27,.09); border-left: 3px solid var(--red); padding: 11px 14px; border-radius: 0 6px 6px 0; }
   .form-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
@@ -496,24 +509,33 @@
       </div>
       <label>Email<input id="f-email" name="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
 
-      <div class="row-3">
-        <label>Year <span class="req" aria-hidden="true">*</span><input id="f-year" name="vehicle_year" type="text" inputmode="numeric" placeholder="2021"></label>
-        <label>Make <span class="req" aria-hidden="true">*</span><input id="f-make" name="vehicle_make" type="text" placeholder="Toyota"></label>
-        <label>Model <span class="req" aria-hidden="true">*</span><input id="f-model" name="vehicle_model" type="text" placeholder="4Runner"></label>
+      <!-- VEHICLES: block 1 lives in the markup; "Add another" clones it. -->
+      <div class="veh" data-veh="1">
+        <div class="veh-head" hidden>
+          <span class="veh-label">Vehicle 1</span>
+        </div>
+        <div class="row-3">
+          <label>Year <span class="req" aria-hidden="true">*</span><input id="f-year" name="vehicle_year" type="text" inputmode="numeric" placeholder="2021"></label>
+          <label>Make <span class="req" aria-hidden="true">*</span><input id="f-make" name="vehicle_make" type="text" placeholder="Toyota"></label>
+          <label>Model <span class="req" aria-hidden="true">*</span><input id="f-model" name="vehicle_model" type="text" placeholder="4Runner"></label>
+        </div>
+
+        <fieldset>
+          <legend>Services wanted</legend>
+          <div class="checks">
+            <label><input id="s1" type="checkbox" name="services" value="Full detail, inside and out"> Full detail, inside &amp; out</label>
+            <label><input id="s2" type="checkbox" name="services" value="Interior shampooing"> Interior shampooing</label>
+            <label><input id="s3" type="checkbox" name="services" value="Headlight restoration"> Headlight restoration</label>
+            <label><input id="s4" type="checkbox" name="services" value="Clay bar treatment"> Clay bar treatment</label>
+            <label><input id="s5" type="checkbox" name="services" value="Engine bay detail"> Engine bay detail</label>
+            <label><input id="s6" type="checkbox" name="services" value="Odor / smell removal"> Odor / smell removal</label>
+            <label><input id="s7" type="checkbox" name="services" value="Boat detailing"> Boat detailing</label>
+          </div>
+        </fieldset>
       </div>
 
-      <fieldset>
-        <legend>Services wanted</legend>
-        <div class="checks">
-          <label><input id="s1" type="checkbox" name="services" value="Full detail, inside and out"> Full detail, inside &amp; out</label>
-          <label><input id="s2" type="checkbox" name="services" value="Interior shampooing"> Interior shampooing</label>
-          <label><input id="s3" type="checkbox" name="services" value="Headlight restoration"> Headlight restoration</label>
-          <label><input id="s4" type="checkbox" name="services" value="Clay bar treatment"> Clay bar treatment</label>
-          <label><input id="s5" type="checkbox" name="services" value="Engine bay detail"> Engine bay detail</label>
-          <label><input id="s6" type="checkbox" name="services" value="Odor / smell removal"> Odor / smell removal</label>
-          <label><input id="s7" type="checkbox" name="services" value="Boat detailing"> Boat detailing</label>
-        </div>
-      </fieldset>
+      <div id="veh-extra"></div>
+      <button type="button" class="add-veh" id="add-veh">+ Add another vehicle</button>
 
       <div class="row">
         <label>City<input id="f-city" name="city" type="text" autocomplete="address-level2" placeholder="Austin"></label>
@@ -650,6 +672,80 @@
       msg.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
 
+    // ----- Vehicles -----
+    var MAX_VEH = 3;
+    var extra = document.getElementById("veh-extra");
+    var addBtn = document.getElementById("add-veh");
+    var base = form.querySelector('.veh[data-veh="1"]');
+
+    function esc(t) { var d = document.createElement("div"); d.textContent = t; return d.innerHTML; }
+    function blocks() { return form.querySelectorAll(".veh"); }
+
+    // One source of truth for the service list: read it off vehicle 1's markup,
+    // so adding a service to the HTML automatically shows up on extra vehicles.
+    var SERVICES = Array.prototype.map.call(base.querySelectorAll(".checks input"), function (i) {
+      return { value: i.value, label: i.parentNode.textContent.trim() };
+    });
+
+    function renumber() {
+      var all = blocks();
+      Array.prototype.forEach.call(all, function (b, i) {
+        var n = i + 1, sfx = n === 1 ? "" : String(n);
+        b.setAttribute("data-veh", n);
+        var head = b.querySelector(".veh-head");
+        var lbl = b.querySelector(".veh-label");
+        if (lbl) lbl.textContent = "Vehicle " + n;
+        if (head) head.hidden = all.length < 2;
+        b.querySelector('[name$="_year"]').name = "vehicle" + sfx + "_year";
+        b.querySelector('[name$="_make"]').name = "vehicle" + sfx + "_make";
+        b.querySelector('[name$="_model"]').name = "vehicle" + sfx + "_model";
+        Array.prototype.forEach.call(b.querySelectorAll(".checks input"), function (c) {
+          c.name = "services" + sfx;
+        });
+      });
+      addBtn.hidden = all.length >= MAX_VEH;
+    }
+
+    function makeBlock() {
+      var d = document.createElement("div");
+      d.className = "veh";
+      d.innerHTML =
+        '<div class="veh-head"><span class="veh-label"></span>' +
+        '<button type="button" class="veh-remove">Remove</button></div>' +
+        '<div class="row-3">' +
+          '<label>Year <span class="req" aria-hidden="true">*</span><input name="_year" type="text" inputmode="numeric" placeholder="2019"></label>' +
+          '<label>Make <span class="req" aria-hidden="true">*</span><input name="_make" type="text" placeholder="Chevrolet"></label>' +
+          '<label>Model <span class="req" aria-hidden="true">*</span><input name="_model" type="text" placeholder="Corvette"></label>' +
+        '</div>' +
+        '<fieldset><legend>Services wanted</legend><div class="checks">' +
+          SERVICES.map(function (sv) {
+            return '<label><input type="checkbox" value="' + esc(sv.value) + '"> ' + esc(sv.label) + '</label>';
+          }).join("") +
+        '</div></fieldset>';
+      d.querySelector(".veh-remove").addEventListener("click", function () {
+        d.parentNode.removeChild(d);
+        renumber();
+        addBtn.focus();
+      });
+      return d;
+    }
+
+    addBtn.addEventListener("click", function () {
+      if (blocks().length >= MAX_VEH) return;
+      var b = makeBlock();
+      extra.appendChild(b);
+      renumber();
+      b.querySelector('[name$="_year"]').focus();
+      b.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+
+    function resetVehicles() {
+      while (extra.firstChild) extra.removeChild(extra.firstChild);
+      renumber();
+    }
+
+    renumber();
+
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       msg.hidden = true;
@@ -657,19 +753,43 @@
       var name = form.name.value.trim();
       var phone = form.phone.value.trim();
       var email = form.email.value.trim();
-      var year = form.vehicle_year.value.trim();
-      var make = form.vehicle_make.value.trim();
-      var model = form.vehicle_model.value.trim();
 
       if (!name) { show("err", "Please add your name."); form.name.focus(); return; }
       if (!phone && !email) { show("err", "Please add a phone number or an email so we can reply."); form.phone.focus(); return; }
-      if (!year || !make || !model) { show("err", "Please tell us the year, make and model of the vehicle."); (year ? (make ? form.vehicle_model : form.vehicle_make) : form.vehicle_year).focus(); return; }
+
+      // A vehicle left completely blank is ignored (someone clicked Add, changed
+      // their mind); a half-filled one is worth stopping for.
+      var all = blocks(), lines = [], bad = null, count = 0;
+      Array.prototype.forEach.call(all, function (b, bi) {
+        var y = b.querySelector('[name$="_year"]'),
+            mk = b.querySelector('[name$="_make"]'),
+            md = b.querySelector('[name$="_model"]');
+        var yv = y.value.trim(), mkv = mk.value.trim(), mdv = md.value.trim();
+        if (!yv && !mkv && !mdv) { if (bi === 0) bad = bad || y; return; }
+        if (!yv || !mkv || !mdv) { bad = bad || (!yv ? y : (!mkv ? mk : md)); return; }
+        count++;
+        var svc = Array.prototype.filter.call(b.querySelectorAll(".checks input"), function (c) { return c.checked; })
+                    .map(function (c) { return c.value; });
+        lines.push(count + ") " + yv + " " + mkv + " " + mdv + " — " + (svc.length ? svc.join(", ") : "Services not specified"));
+      });
+
+      if (bad) {
+        show("err", all.length > 1 ? "Please fill in the year, make and model for each vehicle."
+                                   : "Please tell us the year, make and model of the vehicle.");
+        bad.focus();
+        return;
+      }
 
       var data = new FormData(form);
-      var services = data.getAll("services");
-      data.delete("services");
-      data.append("services", services.length ? services.join(", ") : "Not specified");
-      data.append("vehicle", year + " " + make + " " + model);
+      // Collapse the raw per-vehicle fields into one readable block, so the email
+      // reads as a numbered list instead of twenty separate lines.
+      var keys = [];
+      data.forEach(function (v, k) { keys.push(k); });
+      keys.forEach(function (k) {
+        if (/^vehicle\d*_(year|make|model)$/.test(k) || /^services\d*$/.test(k)) data.delete(k);
+      });
+      data.append("vehicles", lines.join("\n"));
+      data.append("vehicle_count", String(count));
 
       var original = btn.textContent;
       btn.disabled = true;
@@ -679,6 +799,7 @@
         .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
         .then(function () {
           form.reset();
+          resetVehicles();
           show("ok", "<strong>Got it, " + name.split(" ")[0] + ".</strong> We'll reach out shortly with a quote and a time. Need it faster? Call " + PHONE_DISPLAY + ".");
         })
         .catch(function () {
